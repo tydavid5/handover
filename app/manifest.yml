@@ -1,0 +1,117 @@
+modules:
+  jira:projectPage:
+    - key: handover-project-page
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: Handover
+      route: handover
+  jira:issuePanel:
+    - key: handover-issue-panel
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: Handover
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+  rovo:agent:
+    - key: handover-guide
+      name: Handover Guide
+      description: Answers questions about a teammate's handover pack, built from their Jira work, Confluence pages and Teamwork Graph context.
+      prompt: resource:agent-prompt;prompt.md
+      conversationStarters:
+        - What is Maya working on right now?
+        - Who should I ask about the billing project?
+        - What is in Maya's handover pack?
+      actions:
+        - fetch-handover-pack
+        - fetch-person-work
+        - list-handover-contacts
+  action:
+    - key: fetch-handover-pack
+      name: Fetch handover pack
+      function: getHandoverPack
+      actionVerb: GET
+      description: |
+        Builds the leave-handover pack for a named teammate: their open work split into urgent and can-wait, the people to ask, decisions already made, and the docs to read. Use it for "what is in Maya's handover pack" or "what do I need to cover while Maya is away".
+      inputs:
+        person:
+          title: Person
+          type: string
+          required: true
+          description: The teammate's name or email, for example Maya.
+        leaveStart:
+          title: Leave starts
+          type: string
+          required: false
+          description: The first day of leave, YYYY-MM-DD. Used to judge what is urgent. Leave empty to use today.
+    - key: fetch-person-work
+      name: Fetch person work
+      function: getPersonWork
+      actionVerb: GET
+      description: |
+        Lists the Jira work items a person is assigned to, with status, and the Atlassian teams they belong to. Use it for "what is X working on" or "what am I working on". Leave person empty for the user asking.
+      inputs:
+        person:
+          title: Person
+          type: string
+          required: false
+          description: A person's name or email. Leave empty to mean the user who is asking.
+    - key: list-handover-contacts
+      name: List handover contacts
+      function: listHandoverContacts
+      actionVerb: GET
+      description: |
+        For one Jira work item, lists who is assigned, who reported it, who commented recently, and any goals the item is linked to. Use it for "who should I ask about X" or "who is involved in X".
+      inputs:
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: The Jira work item key, for example ORB-12. Leave empty to use the work item open on screen.
+  rovo:mcp:
+    - key: handover-mcp
+      name: Handover MCP
+      tools:
+        - fetch-handover-pack
+        - fetch-person-work
+        - list-handover-contacts
+function:
+  - key: resolver
+    handler: index.handler
+  - key: getHandoverPack
+    handler: index.getHandoverPack
+  - key: getPersonWork
+    handler: index.getPersonWork
+  - key: listHandoverContacts
+    handler: index.listHandoverContacts
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+  - key: agent-prompt
+    path: prompts
+permissions:
+  scopes:
+    - read:jira-user
+    - read:jira-work
+    - read:graph:issue:jira
+    - read:graph:issue-status:jira
+    - read:graph:issue-comment:jira
+    - read:graph:user:atlassian
+    - read:graph:team:atlassian
+    - read:graph:goal:atlassian
+    - read:graph:page:confluence
+    - read:page:confluence
+    - read:space:confluence
+    - storage:app
+app:
+  runtime:
+    name: nodejs22.x
+  # TODO: replaced by forge create at registration. This placeholder id is not a real app.
+  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
