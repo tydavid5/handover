@@ -34,7 +34,7 @@ modules:
       function: getHandoverPack
       actionVerb: GET
       description: |
-        Builds the leave-handover pack for a named teammate: their open work split into urgent and can-wait, the people to ask, decisions already made, and the docs to read. Use it for "what is in Maya's handover pack" or "what do I need to cover while Maya is away".
+        Builds the leave-handover pack for a named teammate: open work split into urgent and can-wait, people to ask, decisions made, and docs to read.
       inputs:
         person:
           title: Person
@@ -77,15 +77,15 @@ modules:
         - fetch-handover-pack
         - fetch-person-work
         - list-handover-contacts
-function:
-  - key: resolver
-    handler: index.handler
-  - key: getHandoverPack
-    handler: index.getHandoverPack
-  - key: getPersonWork
-    handler: index.getPersonWork
-  - key: listHandoverContacts
-    handler: index.listHandoverContacts
+  function:
+    - key: resolver
+      handler: index.handler
+    - key: getHandoverPack
+      handler: index.getHandoverPack
+    - key: getPersonWork
+      handler: index.getPersonWork
+    - key: listHandoverContacts
+      handler: index.listHandoverContacts
 resources:
   - key: main
     path: src/frontend/index.jsx
@@ -108,8 +108,8 @@ permissions:
 app:
   runtime:
     name: nodejs22.x
-  # TODO: replaced by forge create at registration. This placeholder id is not a real app.
-  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  # Registered Nov 9, 2026 via forge create (Developer Space "Five", account 0x5ive@gmail.com).
+  id: ari:cloud:ecosystem::app/1c82e9f4-2072-4818-9ac9-1c978c2718fd
   compatibility:
     jira:
       required: true

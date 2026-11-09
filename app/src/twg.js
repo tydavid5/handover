@@ -16,7 +16,7 @@ const OP_PREFIX = "handover_";
 
 export const PAGE_SIZE = 25;
 
-const TRANSIENT = /RATE_LIMIT|THROTTL|429|502|503|504/i;
+const TRANSIENT = /RATE_LIMIT|THROTTL|429|502|503|504|not permitted to query this organization/i;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

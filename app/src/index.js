@@ -2,7 +2,8 @@
 // The pack is built fresh from Jira, Confluence and Teamwork Graph each time it is asked for,
 // then saved to Forge storage so the project page can show it again.
 
-import api, { route, storage } from "@forge/api";
+import api, { route } from "@forge/api";
+import { storage } from "@forge/kvs";
 import Resolver from "@forge/resolver";
 import { twg, twgAll, Q, userAri, workItemAri } from "./twg.js";
 
@@ -16,10 +17,22 @@ const isHighPriority = (priority) => /^(highest|high)$/i.test(priority || "");
 const askerOf = (payload) => payload?.context?.accountId || null;
 
 // Resolve a name or email to one Jira user, as the person asking (they only find who they can see).
+// Reads run as the app, not as the user: asUser() needs per-user consent, and
+// a raw consent or 401 error thrown out of a resolver makes the Forge runtime
+// re-prompt for consent in a loop (ECO-1297). asApp() uses the scopes granted
+// at install, so it never needs that consent. Teamwork Graph stays on asUser
+// because requestTeamworkGraph only exists there, and twg() already catches
+// its errors. Every call below catches its own failure and returns a
+// controlled error instead of throwing.
 async function findPerson(text) {
-  const res = await api.asUser().requestJira(route`/rest/api/3/user/search?query=${text}&maxResults=5`);
+  let res;
+  try {
+    res = await api.asApp().requestJira(route`/rest/api/3/user/search?query=${text}&maxResults=5`);
+  } catch (e) {
+    return { error: `user search could not run (${String(e?.message || e).slice(0, 120)})` };
+  }
 
-  if (!res.ok) return { error: `user search failed (${res.status})` };
+  if (!res || !res.ok) return { error: `user search failed (${res?.status || "no response"})` };
 
   const users = (await res.json()).filter((u) => u.accountType === "atlassian" && u.active);
 
@@ -33,8 +46,12 @@ async function findPerson(text) {
 }
 
 async function personName(accountId) {
-  const res = await api.asUser().requestJira(route`/rest/api/3/user?accountId=${accountId}`);
-  return res.ok ? (await res.json()).displayName : accountId;
+  try {
+    const res = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${accountId}`);
+    return res.ok ? (await res.json()).displayName : accountId;
+  } catch (e) {
+    return accountId;
+  }
 }
 
 function parseLeaveStart(value) {
@@ -53,6 +70,20 @@ async function teamsOf(accountId, notes) {
 }
 
 async function assignedTo(accountId, notes, maxPages = 4) {
+  // Assigned work via Jira JQL as the app: reliable, needs no user consent and
+  // no Teamwork Graph. Teamwork Graph is the fallback; its curated fields
+  // intermittently answer "User is not permitted to query this organization".
+  const jql = `assignee = "${accountId}" ORDER BY updated DESC`;
+  try {
+    const res = await api.asApp().requestJira(route`/rest/api/3/search/jql?jql=${jql}&fields=summary,status&maxResults=50`);
+    if (res && res.ok) {
+      const body = await res.json();
+      return (body.issues || []).map((i) => ({ key: i.key, summary: i.fields?.summary, status: i.fields?.status?.name || null, webUrl: null }));
+    }
+    notes.push(`assigned work search returned ${res?.status || "no response"}, trying Teamwork Graph`);
+  } catch (e) {
+    notes.push(`assigned work search could not run (${String(e?.message || e).slice(0, 80)}), trying Teamwork Graph`);
+  }
   const r = await twgAll("assignedWork", Q.assignedWork, { userId: userAri(accountId) }, "atlassianUserAssignedJiraWorkItems", maxPages);
   if (!r.ok) notes.push(`assigned work could not be read: ${r.error}`);
   else if (!r.complete) notes.push(`showing the first ${r.nodes.length} assigned work items; there are more`);
@@ -61,9 +92,15 @@ async function assignedTo(accountId, notes, maxPages = 4) {
 
 // Jira REST details for one item: priority and due date, used to judge urgency.
 async function issueDetails(key, notes) {
-  const res = await api.asUser().requestJira(route`/rest/api/3/issue/${key}?fields=summary,status,priority,duedate`);
-  if (!res.ok) {
-    notes.push(`details for ${key} could not be read (${res.status})`);
+  let res;
+  try {
+    res = await api.asApp().requestJira(route`/rest/api/3/issue/${key}?fields=summary,status,priority,duedate`);
+  } catch (e) {
+    notes.push(`details for ${key} could not be read (${String(e?.message || e).slice(0, 80)})`);
+    return null;
+  }
+  if (!res || !res.ok) {
+    notes.push(`details for ${key} could not be read (${res?.status || "no response"})`);
     return null;
   }
   const issue = await res.json();
@@ -77,12 +114,31 @@ async function issueDetails(key, notes) {
 }
 
 // Confluence pages the person contributed to, most recently changed first.
+// Lets the route tag encode the CQL exactly once (pre-encoding it encodes it
+// twice). Tries the app first, then the user on a 401: the consent token
+// exists now, and the fallback is caught, so it cannot restart the consent
+// loop.
 async function personPages(accountId, notes) {
   const cql = `contributor = "${accountId}" order by lastmodified desc`;
-  const res = await api.asUser().requestConfluence(route`/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=5`);
+  const path = route`/rest/api/content/search?cql=${cql}&limit=5`;
+  let res = null;
+  try {
+    res = await api.asApp().requestConfluence(path);
+  } catch (e) {
+    log("confluence-asapp-failed", { error: String(e?.message || e).slice(0, 200) });
+    res = null;
+  }
+  if (!res || res.status === 401) {
+    try {
+      res = await api.asUser().requestConfluence(path);
+    } catch (e) {
+      log("confluence-asuser-failed", { error: String(e?.message || e).slice(0, 200) });
+      res = null;
+    }
+  }
 
-  if (!res.ok) {
-    notes.push(`Confluence pages could not be read (${res.status})`);
+  if (!res || !res.ok) {
+    notes.push(`Confluence pages could not be read (${res?.status || "no response"})`);
     return [];
   }
 
@@ -128,8 +184,13 @@ async function buildPack(person, leaveStart, cloudId) {
   const contacts = new Map();
   const decisions = [];
   for (const item of urgent.slice(0, 5)) {
-    const res = await api.asUser().requestJira(route`/rest/api/3/issue/${item.key}?fields=assignee,reporter`);
-    if (!res.ok) continue;
+    let res;
+    try {
+      res = await api.asApp().requestJira(route`/rest/api/3/issue/${item.key}?fields=assignee,reporter`);
+    } catch (e) {
+      continue;
+    }
+    if (!res || !res.ok) continue;
     const issue = await res.json();
     for (const who of [issue.fields.assignee, issue.fields.reporter]) {
       if (who?.accountId && who.accountId !== person.accountId) {
@@ -145,8 +206,13 @@ async function buildPack(person, leaveStart, cloudId) {
       notes.push("comments and goals could not be read: no site id in context");
       break;
     }
-    const detail = await api.asUser().requestJira(route`/rest/api/3/issue/${item.key}?fields=id`);
-    if (!detail.ok) continue;
+    let detail;
+    try {
+      detail = await api.asApp().requestJira(route`/rest/api/3/issue/${item.key}?fields=id`);
+    } catch (e) {
+      continue;
+    }
+    if (!detail || !detail.ok) continue;
     const issue = await detail.json();
     const ari = workItemAri(cloudId, issue.id);
     const comments = await twgAll("workItemComments", Q.workItemComments, { id: ari, since: "P90D" }, "jiraWorkItemComments", 1);
@@ -236,9 +302,14 @@ export async function listHandoverContacts(payload) {
 
   if (!key) return { error: "Which work item? Give me a key such as ORB-12." };
 
-  const res = await api.asUser().requestJira(route`/rest/api/3/issue/${key}?fields=summary,assignee,reporter,status`);
-  if (res.status === 404) return { error: `${key} does not exist or you cannot see it.` };
-  if (!res.ok) return { error: `Could not read ${key} (${res.status}).` };
+  let res;
+  try {
+    res = await api.asApp().requestJira(route`/rest/api/3/issue/${key}?fields=summary,assignee,reporter,status`);
+  } catch (e) {
+    return { error: `Could not read ${key} (${String(e?.message || e).slice(0, 120)}).` };
+  }
+  if (res?.status === 404) return { error: `${key} does not exist or you cannot see it.` };
+  if (!res || !res.ok) return { error: `Could not read ${key} (${res?.status || "no response"}).` };
 
   const issue = await res.json();
   const cloudId = payload?.context?.cloudId;

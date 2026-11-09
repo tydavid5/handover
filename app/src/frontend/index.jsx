@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ForgeReconciler, { Button, Form, Heading, SectionMessage, Stack, Text, TextField } from "@forge/react";
+import ForgeReconciler, { Button, DatePicker, Form, Heading, SectionMessage, Stack, Text, Textfield } from "@forge/react";
 import { invoke } from "@forge/bridge";
 
 const App = () => {
@@ -9,14 +9,26 @@ const App = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Read the values from state, not from the form submit argument: the UI Kit
+  // Form onSubmit has arrived with no data before, which broke the build with
+  // "Cannot read properties of undefined (reading 'person')". The form data is
+  // only a fallback now.
+  const fieldValue = (v) => (typeof v === "string" ? v : v?.target?.value || "");
+
   const buildPack = async (formData) => {
     setError("");
     setPack(null);
+    const name = (person || formData?.person || "").trim();
+    const start = leaveStart || formData?.leaveStart || null;
+    if (!name) {
+      setError("Give me a name or email to build a pack for.");
+      return;
+    }
     setLoading(true);
     try {
       const result = await invoke("getPack", {
-        person: formData.person,
-        leaveStart: formData.leaveStart || null,
+        person: name,
+        leaveStart: start,
       });
       if (result?.error) setError(result.error);
       else setPack(result);
@@ -41,9 +53,12 @@ const App = () => {
         their Jira work, Confluence pages and Teamwork Graph context.
       </Text>
       <Form onSubmit={buildPack} submitButtonText={loading ? "Building..." : "Build handover pack"}>
-        <TextField label="Teammate" name="person" isRequired placeholder="Name or email, for example Maya" />
-        <TextField label="First day of leave" name="leaveStart" type="date" placeholder="YYYY-MM-DD" />
+        <Textfield label="Teammate" name="person" isRequired placeholder="Name or email, for example Maya" value={person} onChange={(v) => setPerson(fieldValue(v))} />
+        <DatePicker label="First day of leave" name="leaveStart" placeholder="YYYY-MM-DD" value={leaveStart} onChange={(v) => setLeaveStart(fieldValue(v))} />
       </Form>
+      <Button appearance="primary" onClick={buildPack} isDisabled={loading}>
+        {loading ? "Building..." : "Build handover pack"}
+      </Button>
       {error ? <SectionMessage title="Could not build the pack" appearance="error"><Text>{error}</Text></SectionMessage> : null}
       {pack ? (
         <Stack space="space.200">

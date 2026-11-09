@@ -40,7 +40,7 @@ When a teammate goes on leave, their work stalls because the context lives in th
 
 ## Proof links
 
-- Repo: https://github.com/tydavid5/handover (to create)
+- Repo: https://github.com/tydavid5/handover (public, live Nov 9, 2026, commit 51495d97bbb55d2d6a3a0bdb52a51b16b83456f7, verified by read-back: manifest.yml and README.md match local files)
 - Live demo / installation link: (needs Atlassian developer site + Five's Atlassian sign-in)
 - Demo video: (under 5 min, public on @arc5ive)
 - Devpost submission: (to create)
