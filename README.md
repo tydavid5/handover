@@ -2,7 +2,11 @@
 
 When a teammate goes on leave, their work stalls because the context lives in their head and in scattered tickets.
 
-Handover is a Forge app for Jira and Confluence that turns a person's scattered work into a handover pack before they leave, and answers questions about it while they are gone. Pick a teammate and a leave date, and Handover gathers their open Jira issues, the decisions behind them, the Confluence pages they own, and the people who depend on them, using Teamwork Graph context, and writes it into one handover pack. A Rovo agent then answers the team's questions in plain language, as if the person were there, citing the pack and the original tickets. An MCP server exposes the handover data so other agents can check it too.
+Handover is a Forge app for Jira and Confluence that turns a person's scattered work into a handover pack before they leave, and answers questions about it while they are gone.
+
+Live demo site: https://one-atlas-zaly.atlassian.net
+Demo video: https://youtu.be/tkyVZBaVDj0
+ Pick a teammate and a leave date, and Handover gathers their open Jira issues, the decisions behind them, the Confluence pages they own, and the people who depend on them, using Teamwork Graph context, and writes it into one handover pack. A Rovo agent then answers the team's questions in plain language, as if the person were there, citing the pack and the original tickets. An MCP server exposes the handover data so other agents can check it too.
 
 ## How it works
 
